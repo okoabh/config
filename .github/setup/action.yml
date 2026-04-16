@@ -1,0 +1,61 @@
+name: Setup
+description: Composite action to install runtime tooling and cache dependencies
+
+inputs:
+  node-version:
+    description: Node.js version to install
+    required: false
+    default: "22"
+  runtime:
+    description: Package manager to configure (pnpm or bun)
+    required: false
+    default: pnpm
+  install-deps:
+    description: Whether to run dependency install
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      if: inputs.runtime == 'pnpm' || inputs.runtime == 'bun'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Setup pnpm
+      if: inputs.runtime == 'pnpm'
+      uses: pnpm/action-setup@v4
+      with:
+        version: 10
+
+    - name: Setup bun
+      if: inputs.runtime == 'bun'
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Get pnpm store directory
+      if: inputs.runtime == 'pnpm'
+      shell: bash
+      run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - name: Cache pnpm dependencies
+      if: inputs.runtime == 'pnpm'
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-
+
+    - name: Install dependencies (pnpm)
+      if: inputs.runtime == 'pnpm' && inputs.install-deps == 'true'
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Install dependencies (bun)
+      if: inputs.runtime == 'bun' && inputs.install-deps == 'true'
+      shell: bash
+      run: bun install --frozen-lockfile

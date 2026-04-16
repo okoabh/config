@@ -1,0 +1,80 @@
+name: CI Self-Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-yaml:
+    name: Validate YAML Syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate action.yml
+        run: |
+          python3 -c "import yaml; yaml.safe_load(open('.github/setup/action.yml'))"
+          echo "action.yml is valid YAML"
+
+      - name: Validate caller templates
+        run: |
+          for f in callers/*.yml; do
+            python3 -c "import yaml; yaml.safe_load(open('$f'))"
+            echo "$f is valid YAML"
+          done
+
+  test-setup-pnpm:
+    name: Test Setup (pnpm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run composite setup action
+        uses: ./.github/setup
+        with:
+          runtime: pnpm
+          install-deps: "false"
+
+      - name: Verify pnpm is available
+        run: |
+          pnpm --version
+          node --version
+
+  test-setup-bun:
+    name: Test Setup (bun)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run composite setup action
+        uses: ./.github/setup
+        with:
+          runtime: bun
+          install-deps: "false"
+
+      - name: Verify bun is available
+        run: |
+          bun --version
+          node --version
+
+  self-test-summary:
+    name: Self-Test Summary
+    runs-on: ubuntu-latest
+    needs: [validate-yaml, test-setup-pnpm, test-setup-bun]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "validate-yaml: ${{ needs.validate-yaml.result }}"
+          echo "test-setup-pnpm: ${{ needs.test-setup-pnpm.result }}"
+          echo "test-setup-bun: ${{ needs.test-setup-bun.result }}"
+          if [[ "${{ needs.validate-yaml.result }}" == "success" && \
+                "${{ needs.test-setup-pnpm.result }}" == "success" && \
+                "${{ needs.test-setup-bun.result }}" == "success" ]]; then
+            echo "All self-tests passed"
+          else
+            echo "One or more self-tests failed"
+            exit 1
+          fi
